@@ -6,7 +6,7 @@
 |___/_|_|\___|_|\_(_)/ |___/
                    |__/
 
- Version: 1.8.0
+ Version: 1.8.1
   Author: Ken Wheeler
  Website: http://kenwheeler.github.io
     Docs: http://kenwheeler.github.io/slick
@@ -65,6 +65,8 @@
                 infinite: true,
                 initialSlide: 0,
                 lazyLoad: 'ondemand',
+                lazyLoadSrcAttr: 'data-lazy',
+                lazyLoadSrcsetAttr: 'data-srcset',
                 mobileFirst: false,
                 pauseOnHover: true,
                 pauseOnFocus: true,
@@ -533,7 +535,7 @@
             _.options.slidesToScroll = 1;
         }
 
-        $('img[data-lazy]', _.$slider).not('[src]').addClass('slick-loading');
+        $('img['+ _.options.lazyLoadSrcAttr +']', _.$slider).not('[src]').addClass('slick-loading');
 
         _.setupInfinite();
 
@@ -1014,23 +1016,37 @@
 
         var _ = this;
 
+        // If any child element receives focus within the slider we need to pause the autoplay
         _.$slider
             .off('focus.slick blur.slick')
-            .on('focus.slick blur.slick', '*', function(event) {
+            .on(
+                'focus.slick',
+                '*', 
+                function(event) {
+                    var $sf = $(this);
 
-            event.stopImmediatePropagation();
-            var $sf = $(this);
-
-            setTimeout(function() {
-
-                if( _.options.pauseOnFocus ) {
-                    _.focussed = $sf.is(':focus');
-                    _.autoPlay();
+                    setTimeout(function() {
+                        if( _.options.pauseOnFocus ) {
+                            if ($sf.is(':focus')) {
+                                _.focussed = true;
+                                _.autoPlay();
+                            }
+                        }
+                    }, 0);
                 }
+            ).on(
+                'blur.slick',
+                '*', 
+                function(event) {
+                    var $sf = $(this);
 
-            }, 0);
-
-        });
+                    // When a blur occurs on any elements within the slider we become unfocused
+                    if( _.options.pauseOnFocus ) {
+                        _.focussed = false;
+                        _.autoPlay();
+                    }
+                }
+            );
     };
 
     Slick.prototype.getCurrent = Slick.prototype.slickCurrentSlide = function() {
@@ -1224,13 +1240,25 @@
     Slick.prototype.getSlideCount = function() {
 
         var _ = this,
-            slidesTraversed, swipedSlide, centerOffset;
+            slidesTraversed, swipedSlide, swipeTarget, centerOffset;
 
-        centerOffset = _.options.centerMode === true ? _.slideWidth * Math.floor(_.options.slidesToShow / 2) : 0;
+        centerOffset = _.options.centerMode === true ? Math.floor(_.$list.width() / 2) : 0;
+        swipeTarget = (_.swipeLeft * -1) + centerOffset;
 
         if (_.options.swipeToSlide === true) {
+
             _.$slideTrack.find('.slick-slide').each(function(index, slide) {
-                if (slide.offsetLeft - centerOffset + ($(slide).outerWidth() / 2) > (_.swipeLeft * -1)) {
+
+                var slideOuterWidth, slideOffset, slideRightBoundary;
+                slideOuterWidth = $(slide).outerWidth();
+                slideOffset = slide.offsetLeft;
+                if (_.options.centerMode !== true) {
+                    slideOffset += (slideOuterWidth / 2);
+                }
+
+                slideRightBoundary = slideOffset + (slideOuterWidth);
+
+                if (swipeTarget < slideRightBoundary) {
                     swipedSlide = slide;
                     return false;
                 }
@@ -1519,11 +1547,11 @@
 
         function loadImages(imagesScope) {
 
-            $('img[data-lazy]', imagesScope).each(function() {
+            $('img['+ _.options.lazyLoadSrcAttr +']', imagesScope).each(function() {
 
                 var image = $(this),
-                    imageSource = $(this).attr('data-lazy'),
-                    imageSrcSet = $(this).attr('data-srcset'),
+                    imageSource = $(this).attr(_.options.lazyLoadSrcAttr),
+                    imageSrcSet = $(this).attr(_.options.lazyLoadSrcsetAttr),
                     imageSizes  = $(this).attr('data-sizes') || _.$slider.attr('data-sizes'),
                     imageToLoad = document.createElement('img');
 
@@ -1546,7 +1574,7 @@
                                 .attr('src', imageSource)
                                 .animate({ opacity: 1 }, 200, function() {
                                     image
-                                        .removeAttr('data-lazy data-srcset data-sizes')
+                                        .removeAttr(_.options.lazyLoadSrcAttr +' '+ _.options.lazyLoadSrcsetAttr +' data-sizes')
                                         .removeClass('slick-loading');
                                 });
                             _.$slider.trigger('lazyLoaded', [_, image, imageSource]);
@@ -1557,7 +1585,7 @@
                 imageToLoad.onerror = function() {
 
                     image
-                        .removeAttr( 'data-lazy' )
+                        .removeAttr( _.options.lazyLoadSrcAttr)
                         .removeClass( 'slick-loading' )
                         .addClass( 'slick-lazyload-error' );
 
@@ -1738,7 +1766,7 @@
         tryCount = tryCount || 1;
 
         var _ = this,
-            $imgsToLoad = $( 'img[data-lazy]', _.$slider ),
+            $imgsToLoad = $( 'img['+ _.options.lazyLoadSrcAttr +']', _.$slider ),
             image,
             imageSource,
             imageSrcSet,
@@ -1748,8 +1776,8 @@
         if ( $imgsToLoad.length ) {
 
             image = $imgsToLoad.first();
-            imageSource = image.attr('data-lazy');
-            imageSrcSet = image.attr('data-srcset');
+            imageSource = image.attr(_.options.lazyLoadSrcAttr);
+            imageSrcSet = image.attr(_.options.lazyLoadSrcsetAttr);
             imageSizes  = image.attr('data-sizes') || _.$slider.attr('data-sizes');
             imageToLoad = document.createElement('img');
 
@@ -1767,7 +1795,7 @@
 
                 image
                     .attr( 'src', imageSource )
-                    .removeAttr('data-lazy data-srcset data-sizes')
+                    .removeAttr(_.options.lazyLoadSrcAttr +' '+ _.options.lazyLoadSrcsetAttr +' data-sizes')
                     .removeClass('slick-loading');
 
                 if ( _.options.adaptiveHeight === true ) {
@@ -1795,7 +1823,7 @@
                 } else {
 
                     image
-                        .removeAttr( 'data-lazy' )
+                        .removeAttr( _.options.lazyLoadSrcAttr)
                         .removeClass( 'slick-loading' )
                         .addClass( 'slick-lazyload-error' );
 
@@ -2328,7 +2356,7 @@
                 if (index === 0) {
 
                     allSlides
-                        .eq(allSlides.length - 1 - _.options.slidesToShow)
+                        .eq( _.options.slidesToShow + _.slideCount + 1 )
                         .addClass('slick-center');
 
                 } else if (index === _.slideCount - 1) {
